@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>写作热力图</title>
+<style>
+:root{
+  --bg:#ffffff;
+  --text:#1f2328;
+  --muted:#59636e;
+  --border:#d1d9e0;
+  --link:#0969da;
+  --blue:#0969da;
+  --empty:#ebedf0;
+  --l1:#9be9a8;
+  --l2:#40c463;
+  --l3:#30a14e;
+  --l4:#216e39;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;}
+body{min-height:220px;display:flex;align-items:center;justify-content:center;}
+.wrap{display:flex;gap:18px;align-items:flex-start;width:100%;max-width:1120px;margin:0 auto;padding:14px 16px 16px;}
+.main{flex:1;min-width:0;}
+.head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:0 0 10px;}
+.title{font-size:18px;font-weight:600;letter-spacing:-.2px;}
+.title .num{font-weight:700;}
+.card{border:1px solid var(--border);border-radius:6px;background:#fff;padding:8px 16px 12px;}
+.months{display:grid;gap:3px;margin:0 0 6px 36px;height:14px;font-size:11px;color:var(--muted);}
+.months span{white-space:nowrap;}
+.chart{display:flex;gap:8px;align-items:stretch;}
+.days{display:grid;grid-template-rows:repeat(7,minmax(0,1fr));gap:3px;width:28px;flex:0 0 28px;
+  font-size:10px;color:var(--muted);}
+.days span{display:flex;align-items:center;line-height:1;}
+.grid{display:grid;gap:3px;flex:1;min-width:0;}
+.cell{aspect-ratio:1/1;border-radius:2px;background:var(--empty);
+  outline:1px solid rgba(27,31,36,.04);outline-offset:-1px;cursor:pointer;transition:transform .08s ease;}
+.cell:hover{transform:scale(1.28);position:relative;z-index:2;box-shadow:0 0 0 1px rgba(27,31,36,.22);}
+.cell.off{opacity:.35;}
+.footer{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  margin:10px 0 0 36px;font-size:11px;color:var(--muted);}
+.footer a{color:var(--link);text-decoration:none;}
+.footer a:hover{text-decoration:underline;}
+.legend{display:flex;align-items:center;gap:3px;white-space:nowrap;}
+.legend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
+.updated{color:#8c959f;font-size:10px;white-space:nowrap;}
+.years{display:flex;flex-direction:column;gap:10px;flex:0 0 92px;align-items:stretch;padding-top:34px;}
+.year{border:0;background:transparent;text-align:left;font:inherit;font-size:13px;color:var(--muted);
+  padding:7px 14px;border-radius:6px;cursor:pointer;}
+.year:hover{background:#f6f8fa;}
+.year.active{background:var(--blue);color:#fff;font-weight:600;}
+.year.active:hover{background:#0860ca;}
+.tip{position:fixed;z-index:99;pointer-events:none;background:#24292f;color:#fff;font-size:11px;
+  line-height:1.4;padding:6px 9px;border-radius:6px;white-space:nowrap;opacity:0;
+  box-shadow:0 4px 12px rgba(0,0,0,.18);transition:opacity .1s;}
+.tip.show{opacity:1;}
+.tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:#24292f;}
+.note{display:none;margin:8px 0 0 36px;font-size:11px;color:var(--muted);line-height:1.5;}
+.note.show{display:block;}
+@media (max-width:760px){
+  body{min-height:0;}
+  .wrap{flex-direction:column;gap:8px;padding:10px 8px 14px;}
+  .years{flex-direction:row;flex:none;width:100%;padding-top:0;flex-wrap:wrap;gap:6px;}
+  .year{padding:5px 12px;}
+  .card{padding:8px 10px 10px;}
+  .months,.footer,.note{margin-left:32px;}
+  .title{font-size:16px;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="main">
+    <div class="head">
+      <div class="title" id="title">&nbsp;</div>
+    </div>
+    <div class="card">
+      <div class="months" id="months"></div>
+      <div class="chart">
+        <div class="days" id="daylabels"></div>
+        <div class="grid" id="grid"></div>
+      </div>
+      <div class="footer">
+        <div>
+          <a href="#" id="learn">Learn how we count contributions</a>
+          <span class="updated" id="updated"></span>
+        </div>
+        <div class="legend">
+          Less
+          <i style="background:var(--empty)"></i>
+          <i style="background:var(--l1)"></i>
+          <i style="background:var(--l2)"></i>
+          <i style="background:var(--l3)"></i>
+          <i style="background:var(--l4)"></i>
+          More
+        </div>
+      </div>
+      <div class="note" id="note">统计口径：按 GMT+8 当天有页面创建或编辑记作一次贡献，每小时刷新一次；颜色深浅代表当天的活动次数。数据来自页面时间戳元数据，不读取笔记正文。</div>
+    </div>
+  </div>
+  <div class="years" id="years"></div>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+/* 内置快照：独立打开 /html 上传的离线文件时也能完整显示 */
+var SNAPSHOT = {
+  updatedAt: "2026-11-06T17:01:00+08:00",
+  days: [
+    {date:"2026-05-27",count:67},
+    {date:"2026-06-02",count:1},
+    {date:"2026-07-02",count:1},
+    {date:"2026-07-04",count:1},
+    {date:"2026-07-05",count:1},
+    {date:"2026-07-29",count:1},
+    {date:"2026-08-08",count:1},
+    {date:"2026-09-28",count:1},
+    {date:"2026-10-24",count:1},
+    {date:"2026-11-01",count:1},
+    {date:"2026-11-02",count:1},
+    {date:"2026-11-03",count:1},
+    {date:"2026-11-04",count:1},
+    {date:"2026-11-06",count:38}
+  ]
+};
+
+var LEVELS = ["--empty","--l1","--l2","--l3","--l4"];
+var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+var MON_FULL = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+var WEEK = ["周日","周一","周二","周三","周四","周五","周六"];
+var DAY_MS = 86400000;
+var DATA = SNAPSHOT;
+var YEAR = new Date().getFullYear();
+var $ = function(id){ return document.getElementById(id); };
+
+function pad(n){ return n < 10 ? "0" + n : "" + n; }
+function isoUTC(ms){ var d = new Date(ms); return d.getUTCFullYear() + "-" + pad(d.getUTCMonth()+1) + "-" + pad(d.getUTCDate()); }
+function levelOf(n){
+  if(!n || n <= 0) return 0;
+  if(n <= 2) return 1;
+  if(n <= 9) return 2;
+  if(n <= 29) return 3;
+  return 4;
+}
+function gridStart(y){
+  var jan1 = new Date(Date.UTC(y,0,1));
+  return Date.UTC(y,0,1 - jan1.getUTCDay());
+}
+function gridWeeks(y){
+  var s = gridStart(y);
+  var dec31 = new Date(Date.UTC(y,11,31));
+  var e = Date.UTC(y,11,31 + (6 - dec31.getUTCDay()));
+  return Math.floor((e - s) / (7*DAY_MS)) + 1;
+}
+function byYear(){
+  var out = {};
+  var days = (DATA && DATA.days) || [];
+  for(var i=0;i<days.length;i++){
+    var d = days[i], y = parseInt(String(d.date).slice(0,4),10);
+    if(!out[y]) out[y] = {};
+    out[y][d.date] = Number(d.count) || 0;
+  }
+  return out;
+}
+function allYears(){
+  var map = byYear(), set = {}, now = new Date().getFullYear(), i;
+  for(i=now;i>now-5;i--) set[i] = 1;
+  for(var k in map) if(map.hasOwnProperty(k)) set[parseInt(k,10)] = 1;
+  var arr = [];
+  for(var v in set) if(set.hasOwnProperty(v)) arr.push(parseInt(v,10));
+  arr.sort(function(a,b){ return b-a; });
+  return arr;
+}
+
+function renderYears(){
+  var host = $("years");
+  host.innerHTML = "";
+  var list = allYears();
+  for(var i=0;i<list.length;i++){
+    (function(y){
+      var b = document.createElement("button");
+      b.className = "year" + (y === YEAR ? " active" : "");
+      b.textContent = y;
+      b.onclick = function(){ YEAR = y; renderYears(); renderChart(); };
+      host.appendChild(b);
+    })(list[i]);
+  }
+}
+
+function renderChart(){
+  var map = byYear(), vals = map[YEAR] || {};
+  var total = 0;
+  for(var k in vals) if(vals.hasOwnProperty(k)) total += vals[k];
+
+  $("title").innerHTML = total > 0
+    ? '<span class="num">' + total + '</span> contributions in ' + YEAR
+    : 'No contributions in ' + YEAR;
+
+  var W = gridWeeks(YEAR), start = gridStart(YEAR);
+  var months = $("months"), grid = $("grid");
+  months.style.gridTemplateColumns = "repeat(" + W + ",minmax(0,1fr))";
+  grid.style.gridTemplateColumns = "repeat(" + W + ",minmax(0,1fr))";
+
+  months.innerHTML = "";
+  for(var m=0;m<12;m++){
+    var col = Math.floor((Date.UTC(YEAR,m,1) - start) / (7*DAY_MS));
+    if(col < 0) col = 0;
+    if(col >= W) col = W-1;
+    var s = document.createElement("span");
+    s.textContent = MON[m];
+    s.style.gridColumnStart = String(col + 1);
+    months.appendChild(s);
+  }
+
+  var labels = $("daylabels");
+  labels.innerHTML = "";
+  var dayNames = ["","Mon","","Wed","","Fri",""];
+  for(var r=0;r<7;r++){
+    var ls = document.createElement("span");
+    ls.textContent = dayNames[r];
+    labels.appendChild(ls);
+  }
+
+  grid.innerHTML = "";
+  var frag = document.createDocumentFragment();
+  for(var row=0;row<7;row++){
+    for(var c=0;c<W;c++){
+      var t = start + (c*7 + row)*DAY_MS;
+      var d = new Date(t);
+      var inYear = d.getUTCFullYear() === YEAR;
+      var n = inYear ? (vals[isoUTC(t)] || 0) : 0;
+      var cell = document.createElement("div");
+      cell.className = "cell" + (inYear ? "" : " off");
+      cell.style.background = "var(" + LEVELS[levelOf(n)] + ")";
+      cell.dataset.date = isoUTC(t);
+      cell.dataset.count = String(n);
+      cell.dataset.inyear = inYear ? "1" : "0";
+      frag.appendChild(cell);
+    }
+  }
+  grid.appendChild(frag);
+
+  var u = DATA && DATA.updatedAt ? String(DATA.updatedAt) : "";
+  var clock = u.length >= 16 ? u.slice(11,16) : "";
+  $("updated").textContent = clock ? " · 更新于 " + clock : "";
+}
+
+function showTip(cell, ev){
+  var tip = $("tip");
+  var n = parseInt(cell.dataset.count,10) || 0;
+  var inYear = cell.dataset.inyear === "1";
+  var parts = cell.dataset.date.split("-");
+  var d = new Date(Date.UTC(+parts[0], +parts[1]-1, +parts[2]));
+  var label = parts[0] + "年" + (+parts[1]) + "月" + (+parts[2]) + "日 · " + WEEK[d.getUTCDay()];
+  tip.textContent = !inYear ? "不在 " + YEAR + " 年范围内" : (n > 0 ? label + " · " + n + " 次活动" : label + " · 无记录");
+  tip.classList.add("show");
+  var w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.max(4, ev.clientX - w/2) + "px";
+  tip.style.top = Math.max(4, ev.clientY - h - 12) + "px";
+}
+function hideTip(){ $("tip").classList.remove("show"); }
+
+$("grid").addEventListener("mouseover", function(ev){
+  var cell = ev.target && ev.target.closest ? ev.target.closest(".cell") : null;
+  if(cell) showTip(cell, ev);
+});
+$("grid").addEventListener("mousemove", function(ev){
+  var cell = ev.target && ev.target.closest ? ev.target.closest(".cell") : null;
+  if(cell) showTip(cell, ev);
+});
+$("grid").addEventListener("mouseout", hideTip);
+window.addEventListener("scroll", hideTip, true);
+
+$("learn").addEventListener("click", function(ev){
+  ev.preventDefault();
+  $("note").classList.toggle("show");
+});
+
+/* 托管为网页时，优先读取 activity.json，并每 5 分钟自动刷新；离线则用内置快照。
+   数据源可用 ?src=<完整 URL> 覆盖，便于以后换托管平台而不改代码。
+   若页面 URL 带 sharecode（旧托管环境需要），会透传给同源请求。 */
+function dataUrl(){
+  var src = "";
+  try{ src = new URLSearchParams(window.location.search).get("src") || ""; }catch(e){}
+  if(src){
+    return src + (src.indexOf("?") > -1 ? "&" : "?") + "t=" + Date.now();
+  }
+  var q = "";
+  try{
+    var sc = new URLSearchParams(window.location.search).get("sharecode");
+    if(sc) q = "&sharecode=" + encodeURIComponent(sc);
+  }catch(e){}
+  return "activity.json?t=" + Date.now() + q;
+}
+function refresh(){
+  try{
+    fetch(dataUrl(), {cache:"no-store"})
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if(j && j.days && j.days.length !== undefined){
+          DATA = j;
+          renderYears();
+          renderChart();
+        }
+      })["catch"](function(){});
+  }catch(e){}
+}
+
+renderYears();
+renderChart();
+refresh();
+setInterval(refresh, 5*60*1000);
+document.addEventListener("visibilitychange", function(){ if(!document.hidden) refresh(); });
+</script>
+</body>
+</html>

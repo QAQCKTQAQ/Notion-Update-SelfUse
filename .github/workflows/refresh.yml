@@ -1,0 +1,42 @@
+name: 刷新写作热力数据
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-heatmap
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 准备 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 拉取 Notion 时间戳并生成 activity.json
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        run: node scripts/sync.mjs
+
+      - name: 数据有变化时提交
+        run: |
+          git config user.name "heatmap-bot"
+          git config user.email "heatmap-bot@users.noreply.github.com"
+          git add activity.json
+          if git diff --staged --quiet; then
+            echo "数据无变化，跳过提交"
+          else
+            git commit -m "chore: 刷新写作热力数据"
+            git push
+          fi
