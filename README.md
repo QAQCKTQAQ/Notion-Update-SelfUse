@@ -4,12 +4,19 @@ GitHub 风格贡献热力图，直接嵌进 Notion 主页。数据由 GitHub Act
 
 链路：`GitHub Actions（每小时）` → `Notion API 只读时间戳` → `activity.json` → `GitHub Pages` → `Notion /embed 里的 iframe`
 
+> **当前部署状态（2026-11-06 已跑通）**
+> 仓库：`QAQCKTQAQ/Notion-Update-SelfUse`（public，分支 `main`）｜ Pages：<https://qaqcktqaq.github.io/Notion-Update-SelfUse/>（Source = Deploy from a branch，main / root）
+> `NOTION_TOKEN` 已存于 Actions Secrets；workflow `刷新写作热力数据` 已启用（每小时 UTC 整点 + 手动触发）；Notion 主页的 `/embed` 已指向上面的 Pages 地址。
+> 首次运行：扫描 117 条记录 / 去重后 117 个页面，job 结论 `success`，并由 workflow 自动提交了 `activity.json`、触发 Pages 重建。
+> 下面的「一 / 二 / 三」是**重建或换账号时的配置说明**，当前无需重复操作。
+
 ## 隐私
 
 - 同步脚本 `scripts/sync.mjs` 只使用页面的 `created_time`、`last_edited_time`、`parent`、`archived`，以及 `id`（仅用于按页面去重）。
 - **不读取、不打印、不输出**标题、`properties`、正文、块内容、附件、URL。
 - `activity.json` 只有 `{"updatedAt": "...", "days": [{"date": "YYYY-MM-DD", "count": N}]}`。公开仓库里也只有「哪天有几次活动」，没有任何可识别内容。
-- 时间按 **GMT+8** 归类；每个页面取其创建/最后编辑中较晚的一个时间戳计一次。
+- 时间按 **GMT+8** 归类；每个页面的**创建日**和**最后编辑日**各计一次，同一天合并为一次。这样老页面被改动时，它历史上被写下的那天不会从热力图消失。
+- 注意：Notion API 只暴露「最后编辑时间」，拿不到完整编辑历史；所以这里的「贡献」是「页面-日期」对数，不是真实编辑次数。
 
 ## 一、Notion 侧（约 2 分钟）
 
@@ -55,7 +62,7 @@ GitHub 风格贡献热力图，直接嵌进 Notion 主页。数据由 GitHub Act
 3. 仓库 → **Settings → Pages** → Build and deployment → Source 选 **Deploy from a branch**，Branch 选 `main` / `/ (root)` → Save。
    > 一定要选「Deploy from a branch」。如果选「GitHub Actions」作为 Pages 来源，定时任务用 GITHUB_TOKEN 推送的提交不会触发新的部署工作流，数据就不会上线。
 
-4. 稍等 1–2 分钟，打开 `https://<你的用户名>.github.io/<仓库名>/` 确认能看到热力图。
+4. 稍等 1–2 分钟，打开 `https://qaqcktqaq.github.io/Notion-Update-SelfUse/` 确认能看到热力图。
 
 ## 三、跑一次并核对
 
@@ -63,7 +70,7 @@ GitHub 风格贡献热力图，直接嵌进 Notion 主页。数据由 GitHub Act
 
 ```
 已扫描 N 条页面记录，去重后 M 个页面
-活跃日期 X 天，贡献总数 Y
+活跃日期 X 天，计入 Y 次页面活动（创建日 + 最后编辑日）
 ```
 
 **重点看 `去重后 M 个页面`**：它应该接近你的笔记总数（约 100+）。如果只有个位数，说明第一步的根页面授权没生效，回去检查 Add connections。脚本在读到 0 个页面时会主动报错中止，不会把历史数据清空。
@@ -72,20 +79,20 @@ GitHub 风格贡献热力图，直接嵌进 Notion 主页。数据由 GitHub Act
 
 ## 四、接进 Notion
 
-拿到 Pages 链接后，在 Notion 主页里新建一个嵌入块：
+在 Notion 主页里用嵌入块指向 Pages 地址（**当前主页的嵌入块已由旧 WorkBuddy 链接原地替换为下面这个地址**）：
 
 ```
-/embed  →  粘贴 https://<用户名>.github.io/<仓库名>/
+/embed  →  粘贴 https://qaqcktqaq.github.io/Notion-Update-SelfUse/
 ```
 
-拖动嵌入块下边缘把高度调到约 260px 以上。之前那条 WorkBuddy 的旧嵌入块可以手动删掉；**确认新链路连续跑两天正常后**，再停用 WorkBuddy 里的「刷新 Notion 写作热力」定时任务，期间两条链路并存互不影响。
+拖动嵌入块下边缘把高度调到约 260px 以上。主页上更早的静态 PNG、日历视图、Gallery 卡片和公式看板属于旧方案遗留，仍在页面上（清理需要读取主页正文，按隐私约定未擅自处理，可手动删）。**确认新链路连续跑两天正常后**，再停用 WorkBuddy 里的「刷新 Notion 写作热力」定时任务，期间两条链路并存互不影响。
 
 ## 换托管平台 / 换数据源
 
 页面支持 `?src=<完整 JSON URL>` 覆盖数据源，例如：
 
 ```
-https://<用户名>.github.io/<仓库名>/?src=https://其他站点/activity.json
+https://qaqcktqaq.github.io/Notion-Update-SelfUse/?src=https://其他站点/activity.json
 ```
 
 换平台时只改这一个参数，不用改代码。GitHub Pages 的 `activity.json` 带 `Access-Control-Allow-Origin: *`，所以跨域也能读。离线用 `/html` 直接上传 `index.html` 时，页面会用文件内置的快照数据（不会自动更新）。

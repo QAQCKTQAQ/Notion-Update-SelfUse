@@ -74,7 +74,7 @@ async function searchPage(cursor) {
 async function main() {
   if (!TOKEN) throw new Error("缺少环境变量 NOTION_TOKEN");
 
-  const latestById = new Map(); // page id -> 最新时间戳
+  const stampsById = new Map(); // page id -> Set(创建时间, 最后编辑时间)
   let scanned = 0;
   let cursor = null;
 
@@ -88,14 +88,15 @@ async function main() {
       const parentIds = [p.database_id, p.data_source_id, p.page_id, p.block_id].filter(Boolean);
       if (parentIds.some((x) => EXCLUDES.has(normId(x)))) continue;
 
-      const a = item.created_time;
-      const b = item.last_edited_time;
-      const latest = a && b ? (a > b ? a : b) : a || b;
-      if (!latest) continue;
+      // 创建日代表「哪天写下这篇」，最后编辑日代表「哪天又动过它」；
+      // 两者各计一次，避免只取最新时间戳时把历史活跃日抹掉。
+      const stamps = [item.created_time, item.last_edited_time].filter(Boolean);
+      if (!stamps.length) continue;
 
       // id 只在这个 Map 里做去重，绝不写入输出
-      const prev = latestById.get(item.id);
-      if (!prev || latest > prev) latestById.set(item.id, latest);
+      let set = stampsById.get(item.id);
+      if (!set) stampsById.set(item.id, (set = new Set()));
+      for (const s of stamps) set.add(s);
       scanned++;
     }
     cursor = data.has_more ? data.next_cursor : null;
@@ -103,14 +104,16 @@ async function main() {
   } while (cursor);
 
   // 授权丢失时绝不覆盖成空数据，否则历史热力会被清空
-  if (latestById.size === 0) {
+  if (stampsById.size === 0) {
     throw new Error("未读到任何页面：通常是集成未授权根页面或 token 失效。已中止，activity.json 保持不变");
   }
 
   const counts = new Map();
-  for (const latest of latestById.values()) {
-    const day = gmt8Date(latest);
-    counts.set(day, (counts.get(day) || 0) + 1);
+  for (const stamps of stampsById.values()) {
+    // 同一页面若创建与编辑在同一天，只点亮一次
+    for (const day of new Set([...stamps].map(gmt8Date))) {
+      counts.set(day, (counts.get(day) || 0) + 1);
+    }
   }
 
   const days = [...counts.entries()]
@@ -122,8 +125,8 @@ async function main() {
   await writeFile(out, JSON.stringify({ updatedAt, days }, null, 2) + "\n", "utf8");
 
   const total = days.reduce((sum, d) => sum + d.count, 0);
-  console.log(`已扫描 ${scanned} 条页面记录，去重后 ${latestById.size} 个页面`);
-  console.log(`活跃日期 ${days.length} 天，贡献总数 ${total}`);
+  console.log(`已扫描 ${scanned} 条页面记录，去重后 ${stampsById.size} 个页面`);
+  console.log(`活跃日期 ${days.length} 天，计入 ${total} 次页面活动（创建日 + 最后编辑日）`);
   console.log(`已写入 ${out}`);
   console.log("若「去重后页面数」明显少于你的笔记总数，说明集成授权范围不足，请检查根页面是否已 Add connections");
 }
