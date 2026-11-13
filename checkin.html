@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>打卡 · 热力图</title>
+<script>
+/* 主题：默认跟随系统；?theme=time 按本地时间；?theme=light|dark 锁定。 */
+(function(){
+  var mode = "auto";
+  try{
+    var v = new URLSearchParams(location.search).get("theme");
+    if(v && ["auto","time","light","dark"].indexOf(v) > -1) mode = v;
+  }catch(e){}
+  var mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  function isNight(){ var h = new Date().getHours(); return h >= 19 || h < 7; }
+  function apply(){
+    var dark = mode === "dark" ||
+      (mode === "time" ? isNight() : mode === "auto" && !!mq && mq.matches);
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    var meta = document.querySelector('meta[name="color-scheme"]');
+    if(meta) meta.content = dark ? "dark" : "light";
+  }
+  apply();
+  if(mq){
+    if(mq.addEventListener) mq.addEventListener("change", apply);
+    else if(mq.addListener) mq.addListener(apply);
+  }
+  if(mode === "time") setInterval(apply, 60*1000);
+  window.addEventListener("focus", apply);
+})();
+</script>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#ffffff; --card:#ffffff; --panel:#f6f8fa; --input:#ffffff;
+  --text:#1f2328; --muted:#59636e; --border:#d1d9e0; --line:#eaeef2;
+  --link:#0969da; --blue:#0969da; --blue-hover:#0860ca; --year-hover:#f6f8fa;
+  --empty:#ebedf0; --l1:#9be9a8; --l2:#40c463; --l3:#30a14e; --l4:#216e39;
+  --cell-outline:rgba(27,31,36,.04); --cell-shadow:rgba(27,31,36,.22);
+  --updated:#8c959f; --tip-bg:#24292f; --tip-text:#ffffff; --tip-shadow:rgba(0,0,0,.18);
+  --ok:#1a7f37; --danger:#cf222e;
+}
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0d1117; --card:#0d1117; --panel:#161b22; --input:#0d1117;
+  --text:#e6edf3; --muted:#8b949e; --border:#30363d; --line:#21262d;
+  --link:#58a6ff; --blue:#1f6feb; --blue-hover:#388bfd; --year-hover:#161b22;
+  --empty:#161b22; --l1:#0e4429; --l2:#006d32; --l3:#26a641; --l4:#39d353;
+  --cell-outline:rgba(240,246,252,.06); --cell-shadow:rgba(240,246,252,.35);
+  --updated:#7d8590; --tip-bg:#30363d; --tip-text:#e6edf3; --tip-shadow:rgba(0,0,0,.55);
+  --ok:#3fb950; --danger:#f85149;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,"PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+body,.card,.habit,.panel,.btn,.check{transition:background-color .2s ease,color .2s ease}
+.app{max-width:1120px;margin:0 auto;padding:16px 18px 26px}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.title{font-size:19px;font-weight:650;letter-spacing:-.2px}
+.sub{font-size:11.5px;color:var(--muted);margin-top:3px}
+.tools{display:flex;gap:6px;flex-wrap:wrap}
+.btn{border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:6px;
+  padding:6px 11px;font-size:12px;cursor:pointer}
+.btn:hover{background:var(--year-hover)}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.primary:hover{background:var(--blue-hover)}
+.btn.danger{color:var(--danger)}
+.overview{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-bottom:12px}
+.kpi{border:1px solid var(--border);border-radius:8px;background:var(--card);padding:10px 12px}
+.kpi .k{font-size:10.5px;color:var(--muted)}
+.kpi .v{font-size:19px;font-weight:650;margin-top:2px;line-height:1.2}
+.kpi .u{font-size:10.5px;color:var(--muted);margin-left:3px;font-weight:400}
+.panel{border:1px solid var(--border);border-radius:8px;background:var(--card);padding:12px 14px 14px;margin-bottom:12px}
+.panel-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.panel-head h2{font-size:14px;font-weight:650;margin:0}
+.muted{font-size:11px;color:var(--muted)}
+.habits{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:8px}
+.habit{border:1px solid var(--border);border-radius:8px;padding:10px 11px;background:var(--panel)}
+.habit.done{border-color:var(--l3)}
+.habit-top{display:flex;align-items:center;gap:7px}
+.emoji{font-size:16px;line-height:1}
+.hname{font-weight:600;font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.edit{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;padding:2px 4px}
+.edit:hover{color:var(--text)}
+.habit-meta{font-size:10.5px;color:var(--muted);margin:6px 0 7px}
+.bar{height:5px;border-radius:99px;background:var(--empty);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--l3);border-radius:99px}
+.check{width:100%;margin-top:9px;border:1px solid var(--border);background:var(--card);
+  color:var(--text);border-radius:6px;padding:6px;font-size:11.5px;cursor:pointer}
+.check:hover{filter:brightness(.97)}
+.habit.done .check{background:var(--l1);border-color:var(--l2)}
+.months{display:grid;gap:3px;margin:0 0 6px 34px;height:14px;font-size:10.5px;color:var(--muted)}
+.months span{white-space:nowrap}
+.chart{display:flex;gap:8px;align-items:stretch}
+.days{display:grid;grid-template-rows:repeat(7,minmax(0,1fr));gap:3px;width:26px;flex:0 0 26px;
+  font-size:10px;color:var(--muted)}
+.days span{display:flex;align-items:center;line-height:1}
+.grid{display:grid;gap:3px;flex:1;min-width:0}
+.cell{aspect-ratio:1/1;border-radius:2px;background:var(--empty);
+  outline:1px solid var(--cell-outline);outline-offset:-1px;cursor:pointer;
+  transition:transform .08s ease,background-color .2s ease}
+.cell:hover{transform:scale(1.3);position:relative;z-index:2;box-shadow:0 0 0 1px var(--cell-shadow)}
+.cell.off{opacity:.3;cursor:default}
+.cell.future{opacity:.5}
+.heat-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  margin:9px 0 0 34px;font-size:10.5px;color:var(--muted);flex-wrap:wrap}
+.legend{display:flex;align-items:center;gap:3px;white-space:nowrap}
+.legend i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.hint{font-size:10.5px;color:var(--updated);margin:8px 0 0 34px}
+.years{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+.year{border:0;background:transparent;color:var(--muted);font-size:11.5px;
+  padding:4px 9px;border-radius:5px;cursor:pointer}
+.year:hover{background:var(--year-hover)}
+.year.active{background:var(--blue);color:#fff;font-weight:600}
+.stats{display:grid;gap:6px}
+.stat-row{display:grid;grid-template-columns:1.5fr .8fr .6fr .7fr .7fr;gap:8px;align-items:center;
+  font-size:11.5px;padding:7px 9px;border-radius:6px;background:var(--panel)}
+.stat-row.head{background:transparent;color:var(--muted);font-size:10.5px;padding-top:0;padding-bottom:2px}
+.stat-row .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pct{color:var(--ok);font-weight:600}
+.empty{padding:24px 10px;text-align:center;color:var(--muted);font-size:12px}
+.storage{font-size:10.5px;color:var(--updated);line-height:1.6;margin-top:10px}
+.storage.bad{color:var(--danger)}
+.tip{position:fixed;z-index:99;pointer-events:none;background:var(--tip-bg);color:var(--tip-text);
+  font-size:11px;line-height:1.4;padding:6px 9px;border-radius:6px;white-space:nowrap;opacity:0;
+  box-shadow:0 4px 12px var(--tip-shadow);transition:opacity .1s;max-width:340px;overflow:hidden;text-overflow:ellipsis}
+.tip.show{opacity:1}
+.mask{position:fixed;inset:0;background:rgba(0,0,0,.38);display:none;align-items:center;justify-content:center;
+  z-index:60;padding:16px}
+.mask.show{display:flex}
+.dialog{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;
+  width:min(370px,100%);box-shadow:0 12px 32px var(--tip-shadow);max-height:86vh;overflow:auto}
+.dialog h3{margin:0 0 10px;font-size:14px}
+.field{margin-bottom:10px}
+.field label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px}
+.field input{width:100%;border:1px solid var(--border);background:var(--input);color:var(--text);
+  border-radius:6px;padding:7px 9px;font-size:12.5px}
+.dialog .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+.dialog textarea{width:100%;height:120px;border:1px solid var(--border);background:var(--input);
+  color:var(--text);border-radius:6px;padding:8px;font-size:11px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.err{color:var(--danger);font-size:11px;min-height:15px}
+.daylist{max-height:230px;overflow:auto;margin-top:8px}
+.dayitem{display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--line);
+  font-size:12px;cursor:pointer}
+.dayitem input{width:auto;margin:0}
+@media (max-width:760px){
+  .app{padding:12px 10px 20px}
+  .habits{grid-template-columns:1fr}
+  .months,.heat-foot,.hint{margin-left:30px}
+  .stat-row{grid-template-columns:1.3fr .8fr .6fr .7fr}
+  .stat-row > :last-child{display:none}
+  .stat-row.head > :last-child{display:none}
+  .years{margin-left:0}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="head">
+    <div>
+      <div class="title">🎯 打卡</div>
+      <div class="sub">每完成一件事，就在今天点一下；同一天完成得越多，格子越绿</div>
+    </div>
+    <div class="tools">
+      <button class="btn primary" id="btnNew">＋ 新建打卡</button>
+      <button class="btn" id="btnExport">导出备份</button>
+      <button class="btn" id="btnImport">导入</button>
+      <input type="file" id="fileInput" accept="application/json,.json" hidden>
+    </div>
+  </header>
+
+  <div class="overview" id="overview"></div>
+
+  <section class="panel">
+    <div class="panel-head"><h2>今天</h2><span class="muted" id="todayLabel"></span></div>
+    <div class="habits" id="habits"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>热力图</h2>
+      <span class="muted">颜色深浅 = 当天完成的事项数量</span>
+      <div class="years" id="years"></div>
+    </div>
+    <div class="months" id="months"></div>
+    <div class="chart">
+      <div class="days" id="daylabels"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div class="heat-foot">
+      <div class="legend">少
+        <i style="background:var(--empty)"></i>
+        <i style="background:var(--l1)"></i>
+        <i style="background:var(--l2)"></i>
+        <i style="background:var(--l3)"></i>
+        <i style="background:var(--l4)"></i>多
+      </div>
+      <span class="muted" id="yearSum"></span>
+    </div>
+    <div class="hint">点任意格子可补打卡或撤销；未来日期不能打。</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>分项统计</h2><span class="muted">每个打卡独立计算，互不影响</span></div>
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <div class="storage" id="storage"></div>
+</div>
+
+<div class="tip" id="tip"></div>
+<div class="mask" id="mask"><div class="dialog" id="dialog"></div></div>
+
+<script>
+/* ---------- 数据层（不依赖 DOM，便于独立校验） ---------- */
+var KEY = "notion-checkin-v1";
+var LEVELS = ["--empty","--l1","--l2","--l3","--l4"];
+var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+var WEEK = ["周日","周一","周二","周三","周四","周五","周六"];
+var DAY_MS = 86400000;
+var state = {version:1, habits:[], logs:{}};
+var storageOK = true;
+
+function pad(n){ return n < 10 ? "0" + n : "" + n; }
+function ymd(d){ return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()); }
+function today(){ return ymd(new Date()); }
+function dayMs(s){ var p = String(s).split("-"); return new Date(+p[0], +p[1]-1, +p[2]).getTime(); }
+function fmtDate(s){ var p = String(s).split("-"); return (+p[0]) + "年" + (+p[1]) + "月" + (+p[2]) + "日 · " + WEEK[new Date(dayMs(s)).getDay()]; }
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+  });
+}
+function uid(){ return "h" + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+function normalize(j){
+  var out = {version:1, habits:[], logs:{}};
+  if(!j || !Array.isArray(j.habits)) return out;
+  out.habits = j.habits.map(function(h){
+    if(!h || typeof h !== "object") return null;
+    var name = String(h.name == null ? "" : h.name).slice(0,80).trim();
+    if(!name) return null;
+    var t = parseInt(h.target,10);
+    return {
+      id: String(h.id || uid()),
+      name: name,
+      emoji: String(h.emoji == null ? "✅" : h.emoji).slice(0,8) || "✅",
+      target: (t > 0 && t < 100000) ? t : 30,
+      created: /^\d{4}-\d{2}-\d{2}$/.test(h.created || "") ? h.created : today()
+    };
+  }).filter(Boolean);
+  var ids = {};
+  out.habits.forEach(function(h){ ids[h.id] = 1; });
+  var logs = (j.logs && typeof j.logs === "object") ? j.logs : {};
+  Object.keys(logs).forEach(function(d){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d) || !Array.isArray(logs[d])) return;
+    var arr = [], seen = {};
+    logs[d].forEach(function(id){
+      if(typeof id === "string" && ids[id] && !seen[id]){ seen[id] = 1; arr.push(id); }
+    });
+    if(arr.length) out.logs[d] = arr;
+  });
+  return out;
+}
+function probe(){
+  try{ localStorage.setItem("__ck_probe","1"); localStorage.removeItem("__ck_probe"); return true; }
+  catch(e){ return false; }
+}
+function load(){
+  try{
+    var raw = localStorage.getItem(KEY);
+    return raw ? normalize(JSON.parse(raw)) : {version:1, habits:[], logs:{}};
+  }catch(e){ return {version:1, habits:[], logs:{}}; }
+}
+function save(){
+  if(!storageOK) return false;
+  try{ localStorage.setItem(KEY, JSON.stringify(state)); return true; }
+  catch(e){ storageOK = false; return false; }
+}
+function habitById(id){
+  for(var i=0;i<state.habits.length;i++) if(state.habits[i].id === id) return state.habits[i];
+  return null;
+}
+function listOn(d){ return (state.logs[d] || []).filter(function(id){ return !!habitById(id); }); }
+function countOn(d){ return listOn(d).length; }
+function levelOf(n){
+  if(!n || n <= 0) return 0;
+  var t = Math.max(1, state.habits.length);
+  return Math.min(4, Math.max(1, Math.ceil(4*n/t)));
+}
+function applyToggle(hid, d){
+  var arr = (state.logs[d] || []).slice();
+  var i = arr.indexOf(hid);
+  if(i > -1) arr.splice(i,1); else arr.push(hid);
+  if(arr.length) state.logs[d] = arr; else delete state.logs[d];
+  save();
+}
+function statsFor(h){
+  var days = Object.keys(state.logs).filter(function(d){
+    return (state.logs[d] || []).indexOf(h.id) > -1;
+  }).sort();
+  var set = {};
+  days.forEach(function(d){ set[d] = 1; });
+  var p = new Date();
+  if(!set[ymd(p)]) p = new Date(p.getFullYear(), p.getMonth(), p.getDate()-1);
+  var cur = 0;
+  while(set[ymd(p)]){ cur++; p = new Date(p.getFullYear(), p.getMonth(), p.getDate()-1); }
+  var best = 0, run = 0, prev = null;
+  days.forEach(function(d){
+    if(prev && Math.round((dayMs(d) - dayMs(prev))/DAY_MS) === 1) run++; else run = 1;
+    if(run > best) best = run;
+    prev = d;
+  });
+  var now = new Date(), mon = now.getFullYear() + "-" + pad(now.getMonth()+1);
+  return {
+    done: days.length, streak: cur, best: best,
+    month: days.filter(function(d){ return d.indexOf(mon) === 0; }).length,
+    last: days.length ? days[days.length-1] : null,
+    set: set
+  };
+}
+function gridStart(y){ var jan1 = new Date(y,0,1); return new Date(y,0,1 - jan1.getDay()); }
+function gridWeeks(y){
+  var dec31 = new Date(y,11,31);
+  var end = new Date(y,11,31 + (6 - dec31.getDay()));
+  return Math.floor((end.getTime() - gridStart(y).getTime())/(7*DAY_MS)) + 1;
+}
+function cellDate(y,c,row){
+  var s = gridStart(y);
+  return new Date(s.getFullYear(), s.getMonth(), s.getDate() + c*7 + row);
+}
+function allYears(){
+  var set = {}, now = new Date().getFullYear(), i;
+  for(i=now;i>now-5;i--) set[i] = 1;
+  Object.keys(state.logs).forEach(function(d){
+    if(countOn(d) > 0) set[parseInt(d.slice(0,4),10)] = 1;
+  });
+  state.habits.forEach(function(h){
+    var y = parseInt(String(h.created || "").slice(0,4),10);
+    if(!isNaN(y)) set[y] = 1;
+  });
+  return Object.keys(set).map(Number).filter(function(y){ return y > 1900 && y < 3000; })
+    .sort(function(a,b){ return b-a; });
+}
+window.__ck = {
+  KEY:KEY, LEVELS:LEVELS, normalize:normalize, statsFor:statsFor, countOn:countOn,
+  levelOf:levelOf, applyToggle:applyToggle, gridWeeks:gridWeeks, cellDate:cellDate,
+  allYears:allYears, ymd:ymd, today:today, fmtDate:fmtDate,
+  getState:function(){ return state; }, setState:function(s){ state = s; }
+};
+</script>
+
+<script>
+/* ---------- 界面层 ---------- */
+var $ = function(id){ return document.getElementById(id); };
+var YEAR = new Date().getFullYear();
+var currentDay = "";
+var pendingImport = null;
+
+function render(){ renderOverview(); renderToday(); renderYears(); renderChart(); renderStats(); renderStorage(); }
+
+function renderStorage(){
+  var el = $("storage");
+  el.className = "storage" + (storageOK ? "" : " bad");
+  el.innerHTML = storageOK
+    ? "数据只保存在当前浏览器的本地存储里，不经过 GitHub、不上传任何服务器。换设备或清除浏览器数据会丢失，请定期「导出备份」。"
+    : "⚠️ 当前嵌入环境不允许写入本地存储，打卡不会被保存。请在浏览器新标签页直接打开本页使用，或用导入 / 导出手动管理数据。";
+}
+function renderOverview(){
+  var t = today(), total = 0, active = 0;
+  Object.keys(state.logs).forEach(function(d){
+    var n = countOn(d); total += n; if(n > 0) active++;
+  });
+  var achieved = state.habits.filter(function(h){ return statsFor(h).done >= h.target; }).length;
+  var cards = [
+    ["进行中", state.habits.length, "项"],
+    ["累计打卡", total, "次"],
+    ["活跃天数", active, "天"],
+    ["今日完成", countOn(t) + " / " + state.habits.length, ""],
+    ["达成目标", achieved, "项"]
+  ];
+  $("overview").innerHTML = cards.map(function(c){
+    return '<div class="kpi"><div class="k">' + c[0] + '</div><div class="v">' +
+      esc(c[1]) + '<span class="u">' + esc(c[2]) + '</span></div></div>';
+  }).join("");
+}
+function renderToday(){
+  var t = today(), host = $("habits");
+  $("todayLabel").textContent = fmtDate(t);
+  if(!state.habits.length){
+    host.innerHTML = '<div class="empty">还没有打卡项目。点右上角「＋ 新建打卡」，设定要做的事情和目标天数。</div>';
+    return;
+  }
+  host.innerHTML = state.habits.map(function(h){
+    var s = statsFor(h), on = (state.logs[t] || []).indexOf(h.id) > -1;
+    var pct = Math.min(100, Math.round(s.done / Math.max(1,h.target) * 100));
+    return '<div class="habit' + (on ? " done" : "") + '">' +
+      '<div class="habit-top"><span class="emoji">' + esc(h.emoji) + '</span>' +
+      '<span class="hname">' + esc(h.name) + '</span>' +
+      '<button class="edit" data-act="edit" data-id="' + esc(h.id) + '" title="编辑">⋯</button></div>' +
+      '<div class="habit-meta">' + s.done + ' / ' + h.target + ' 天 · 连续 ' + s.streak +
+      ' 天 · 最长 ' + s.best + ' 天 · 本月 ' + s.month + ' 次</div>' +
+      '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
+      '<button class="check" data-act="toggle" data-id="' + esc(h.id) + '">' +
+      (on ? "✓ 今天已打卡 · 点击撤销" : "今天打卡") + '</button></div>';
+  }).join("");
+}
+function renderYears(){
+  $("years").innerHTML = allYears().map(function(y){
+    return '<button class="year' + (y === YEAR ? " active" : "") + '" data-year="' + y + '">' + y + '</button>';
+  }).join("");
+}
+function renderChart(){
+  var W = gridWeeks(YEAR), s = gridStart(YEAR), t = today();
+  var months = $("months"), grid = $("grid");
+  months.style.gridTemplateColumns = "repeat(" + W + ",minmax(0,1fr))";
+  grid.style.gridTemplateColumns = "repeat(" + W + ",minmax(0,1fr))";
+  months.innerHTML = "";
+  for(var m=0;m<12;m++){
+    var col = Math.floor((new Date(YEAR,m,1).getTime() - s.getTime())/(7*DAY_MS));
+    if(col < 0) col = 0; if(col >= W) col = W-1;
+    var sp = document.createElement("span");
+    sp.textContent = MON[m]; sp.style.gridColumnStart = String(col + 1);
+    months.appendChild(sp);
+  }
+  var labels = $("daylabels"), names = ["","Mon","","Wed","","Fri",""];
+  labels.innerHTML = "";
+  for(var r=0;r<7;r++){
+    var ls = document.createElement("span"); ls.textContent = names[r]; labels.appendChild(ls);
+  }
+  grid.innerHTML = "";
+  var frag = document.createDocumentFragment(), yearCount = 0, yearActive = 0;
+  for(var row=0;row<7;row++){
+    for(var c=0;c<W;c++){
+      var dt = cellDate(YEAR,c,row), key = ymd(dt), inYear = dt.getFullYear() === YEAR;
+      var n = inYear ? countOn(key) : 0;
+      if(inYear && n > 0){ yearCount += n; yearActive++; }
+      var cell = document.createElement("div");
+      cell.className = "cell" + (inYear ? "" : " off") + (inYear && key > t ? " future" : "");
+      cell.style.background = "var(" + LEVELS[levelOf(n)] + ")";
+      cell.dataset.date = key; cell.dataset.count = String(n); cell.dataset.inyear = inYear ? "1" : "0";
+      frag.appendChild(cell);
+    }
+  }
+  grid.appendChild(frag);
+  $("yearSum").textContent = YEAR + " 年：" + yearCount + " 次打卡 · " + yearActive + " 个活跃日";
+}
+function renderStats(){
+  var host = $("stats");
+  if(!state.habits.length){ host.innerHTML = '<div class="empty">暂无统计</div>'; return; }
+  var html = '<div class="stat-row head"><span>事项</span><span>完成 / 目标</span><span>进度</span><span>当前连续</span><span>最长连续</span></div>';
+  html += state.habits.map(function(h){
+    var s = statsFor(h), pct = Math.min(100, Math.round(s.done / Math.max(1,h.target) * 100));
+    return '<div class="stat-row"><span class="name">' + esc(h.emoji) + " " + esc(h.name) + '</span>' +
+      '<span>' + s.done + " / " + h.target + ' 天</span>' +
+      '<span class="pct">' + pct + '%</span>' +
+      '<span>' + s.streak + ' 天</span>' +
+      '<span>' + s.best + ' 天</span></div>';
+  }).join("");
+  host.innerHTML = html;
+}
+
+/* ---------- 弹层 ---------- */
+function showDialog(html){ $("dialog").innerHTML = html; $("mask").classList.add("show"); }
+function closeDialog(){ $("mask").classList.remove("show"); $("dialog").innerHTML = ""; }
+function openNew(){
+  showDialog('<h3>新建打卡</h3>' +
+    '<div class="field"><label>要做的事情</label><input id="hName" placeholder="例如：跑步 / 读书 / 写日记" maxlength="80"></div>' +
+    '<div class="field"><label>图标（emoji，可留空）</label><input id="hEmoji" value="✅" maxlength="8"></div>' +
+    '<div class="field"><label>目标天数</label><input id="hTarget" type="number" min="1" max="99999" value="30"></div>' +
+    '<input id="hId" type="hidden" value="">' +
+    '<div class="err" id="formErr"></div>' +
+    '<div class="row"><button class="btn" data-act="close">取消</button>' +
+    '<button class="btn primary" data-act="saveHabit">保存</button></div>');
+  $("hName").focus();
+}
+function openEdit(h){
+  showDialog('<h3>编辑打卡</h3>' +
+    '<div class="field"><label>要做的事情</label><input id="hName" value="' + esc(h.name) + '" maxlength="80"></div>' +
+    '<div class="field"><label>图标（emoji）</label><input id="hEmoji" value="' + esc(h.emoji) + '" maxlength="8"></div>' +
+    '<div class="field"><label>目标天数</label><input id="hTarget" type="number" min="1" max="99999" value="' + h.target + '"></div>' +
+    '<input id="hId" type="hidden" value="' + esc(h.id) + '">' +
+    '<div class="err" id="formErr"></div>' +
+    '<div class="row"><button class="btn danger" data-act="deleteHabit" data-id="' + esc(h.id) + '">删除</button>' +
+    '<button class="btn" data-act="close">取消</button>' +
+    '<button class="btn primary" data-act="saveHabit">保存</button></div>');
+}
+function saveHabit(){
+  var name = $("hName").value.trim(), emoji = $("hEmoji").value.trim() || "✅";
+  var target = parseInt($("hTarget").value,10), id = $("hId").value;
+  if(!name){ $("formErr").textContent = "请填写名称"; return; }
+  if(!(target > 0 && target < 100000)){ $("formErr").textContent = "目标天数要是 1–99999 的整数"; return; }
+  if(id){
+    var h = habitById(id);
+    if(h){ h.name = name; h.emoji = emoji; h.target = target; }
+  }else{
+    state.habits.push({id:uid(), name:name, emoji:emoji, target:target, created:today()});
+  }
+  save(); closeDialog(); render();
+}
+function deleteHabit(id, btn){
+  if(btn.getAttribute("data-confirm") !== "1"){
+    btn.setAttribute("data-confirm","1"); btn.textContent = "再点一次确认删除"; return;
+  }
+  var h = habitById(id); if(!h) return;
+  state.habits = state.habits.filter(function(x){ return x.id !== id; });
+  Object.keys(state.logs).forEach(function(d){
+    var arr = (state.logs[d] || []).filter(function(x){ return x !== id; });
+    if(arr.length) state.logs[d] = arr; else delete state.logs[d];
+  });
+  save(); closeDialog(); render();
+}
+function openDay(d){
+  currentDay = d;
+  var items = state.habits.length ? state.habits.map(function(h){
+    var on = (state.logs[d] || []).indexOf(h.id) > -1;
+    return '<label class="dayitem"><input type="checkbox" data-id="' + esc(h.id) + '"' +
+      (on ? " checked" : "") + '>' + esc(h.emoji) + " " + esc(h.name) + '</label>';
+  }).join("") : '<div class="empty">还没有打卡项目</div>';
+  showDialog('<h3>' + fmtDate(d) + '</h3>' +
+    '<div class="muted">勾选表示这天完成了该事项，可补打卡或撤销；改动立即生效。</div>' +
+    '<div class="daylist" id="daylist">' + items + '</div>' +
+    '<div class="row"><button class="btn" data-act="close">完成</button></div>');
+}
+function exportData(){
+  var text = JSON.stringify(state, null, 2);
+  try{
+    var blob = new Blob([text], {type:"application/json"});
+    var u = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = u; a.download = "checkin-backup-" + today() + ".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(u); }, 1000);
+  }catch(e){}
+  showDialog('<h3>导出备份</h3><div class="muted">已尝试下载 JSON 文件。若嵌入环境不允许下载，可直接全选复制下面内容另存。</div>' +
+    '<textarea readonly id="exportText">' + esc(text) + '</textarea>' +
+    '<div class="row"><button class="btn" data-act="copy">复制</button>' +
+    '<button class="btn primary" data-act="close">关闭</button></div>');
+}
+function doImport(){
+  if(!pendingImport) return;
+  state = normalize(pendingImport); pendingImport = null;
+  save(); closeDialog(); render();
+}
+
+/* ---------- 事件 ---------- */
+$("btnNew").addEventListener("click", openNew);
+$("btnExport").addEventListener("click", exportData);
+$("btnImport").addEventListener("click", function(){ $("fileInput").click(); });
+$("fileInput").addEventListener("change", function(ev){
+  var f = ev.target.files && ev.target.files[0]; if(!f) return;
+  var reader = new FileReader();
+  reader.onload = function(){
+    try{
+      var j = JSON.parse(String(reader.result));
+      if(!j || !Array.isArray(j.habits)) throw new Error("bad");
+      pendingImport = j;
+      showDialog('<h3>导入备份</h3><div class="muted">将用备份里的 ' + j.habits.length +
+        ' 个打卡项目与全部记录<b>覆盖</b>当前数据，此操作不可撤销。</div>' +
+        '<div class="row"><button class="btn" data-act="close">取消</button>' +
+        '<button class="btn primary" data-act="doImport">确认导入</button></div>');
+    }catch(e){
+      showDialog('<h3>导入失败</h3><div class="muted">文件不是有效的打卡备份 JSON。</div>' +
+        '<div class="row"><button class="btn" data-act="close">关闭</button></div>');
+    }
+  };
+  reader.readAsText(f);
+  ev.target.value = "";
+});
+$("habits").addEventListener("click", function(ev){
+  var b = ev.target.closest ? ev.target.closest("[data-act]") : null;
+  if(!b) return;
+  var act = b.getAttribute("data-act"), id = b.getAttribute("data-id");
+  if(act === "toggle"){ applyToggle(id, today()); render(); }
+  else if(act === "edit"){ var h = habitById(id); if(h) openEdit(h); }
+});
+$("years").addEventListener("click", function(ev){
+  var b = ev.target.closest ? ev.target.closest("[data-year]") : null;
+  if(!b) return;
+  YEAR = parseInt(b.getAttribute("data-year"),10);
+  renderYears(); renderChart();
+});
+$("grid").addEventListener("click", function(ev){
+  var cell = ev.target.closest ? ev.target.closest(".cell") : null;
+  if(!cell || cell.dataset.inyear !== "1") return;
+  var d = cell.dataset.date;
+  if(d > today()) return;
+  openDay(d);
+});
+$("grid").addEventListener("mouseover", function(ev){
+  var cell = ev.target.closest ? ev.target.closest(".cell") : null;
+  if(cell) showTip(cell, ev);
+});
+$("grid").addEventListener("mousemove", function(ev){
+  var cell = ev.target.closest ? ev.target.closest(".cell") : null;
+  if(cell) showTip(cell, ev);
+});
+$("grid").addEventListener("mouseout", hideTip);
+window.addEventListener("scroll", hideTip, true);
+$("mask").addEventListener("click", function(ev){ if(ev.target === $("mask")) closeDialog(); });
+$("dialog").addEventListener("click", function(ev){
+  var b = ev.target.closest ? ev.target.closest("[data-act]") : null;
+  if(!b) return;
+  var act = b.getAttribute("data-act");
+  if(act === "close") closeDialog();
+  else if(act === "saveHabit") saveHabit();
+  else if(act === "deleteHabit") deleteHabit(b.getAttribute("data-id"), b);
+  else if(act === "doImport") doImport();
+  else if(act === "copy"){
+    var ta = $("exportText");
+    if(ta){ ta.select(); try{ document.execCommand("copy"); b.textContent = "已复制"; }catch(e){} }
+  }
+});
+$("dialog").addEventListener("change", function(ev){
+  var id = ev.target && ev.target.getAttribute ? ev.target.getAttribute("data-id") : null;
+  if(id && currentDay){ applyToggle(id, currentDay); render(); }
+});
+function showTip(cell, ev){
+  var tip = $("tip"), d = cell.dataset.date, n = parseInt(cell.dataset.count,10) || 0;
+  var names = listOn(d).map(function(id){
+    var h = habitById(id); return h ? h.emoji + " " + h.name : "";
+  }).filter(Boolean);
+  var text = fmtDate(d) + " · " + n + " 项";
+  if(names.length) text += "：" + names.slice(0,4).join("、") + (names.length > 4 ? " 等" : "");
+  if(cell.dataset.inyear !== "1") text = "不在 " + YEAR + " 年范围内";
+  tip.textContent = text; tip.classList.add("show");
+  var w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.max(4, Math.min(window.innerWidth - w - 4, ev.clientX - w/2)) + "px";
+  tip.style.top = Math.max(4, ev.clientY - h - 12) + "px";
+}
+function hideTip(){ $("tip").classList.remove("show"); }
+
+/* ---------- 启动 ---------- */
+storageOK = probe();
+state = load();
+render();
+</script>
+</body>
+</html>
