@@ -85,7 +85,23 @@ GitHub 风格贡献热力图，直接嵌进 Notion 主页。数据由 GitHub Act
 /embed  →  粘贴 https://qaqcktqaq.github.io/Notion-Update-SelfUse/
 ```
 
-拖动嵌入块下边缘把高度调到约 260px 以上。主页上更早的静态 PNG、日历视图、Gallery 卡片和公式看板属于旧方案遗留，仍在页面上（清理需要读取主页正文，按隐私约定未擅自处理，可手动删）。**确认新链路连续跑两天正常后**，再停用 WorkBuddy 里的「刷新 Notion 写作热力」定时任务，期间两条链路并存互不影响。
+拖动嵌入块下边缘把高度调到约 260px 以上。旧的 WorkBuddy 定时任务已停用，云端 Actions 是唯一数据源。
+
+## 深色模式（自动切换）
+
+页面默认 `theme=auto`，读取浏览器的 `prefers-color-scheme`：系统切到深色时热力图立即变深，切回来立即变浅（并监听 `change` 事件实时响应，不用刷新页面）。配色采用 GitHub 官方深色 contribution 色阶，格子、卡片、边框、文字、tooltip、年份按钮全部一起换，主题切换有 0.2s 过渡。
+
+在 Notion 里编辑 embed 的 URL 即可改变策略，不用改代码、不用重新部署：
+
+| 地址 | 效果 |
+| --- | --- |
+| `https://qaqcktqaq.github.io/Notion-Update-SelfUse/` | 默认：跟随系统自动切换 |
+| `.../?theme=time` | 按本地时间自动切换：19:00–07:00 深色，其余浅色（每分钟检查） |
+| `.../?theme=dark` / `.../?theme=light` | 锁定深色 / 浅色，不再跟随系统 |
+
+参数可与 `?src=` 组合，例如 `?theme=dark&src=https://其他站点/activity.json`。参数只作用于当前页面，不写 localStorage、不留隐藏状态；去掉参数即恢复自动。
+
+**限制**：Notion 网页／客户端里的「深色外观」是应用内设置，不会改变系统或浏览器的颜色偏好，而嵌入的 iframe 只能读到系统偏好，因此「在 Notion 里手动切深色 → 热力图跟着变深」做不到。若习惯系统浅色 + Notion 深色，用 `?theme=dark` 固定，或用 `?theme=time` 按时间自动切。
 
 ## 换托管平台 / 换数据源
 

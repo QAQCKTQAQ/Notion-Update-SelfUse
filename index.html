@@ -3,20 +3,83 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
 <title>写作热力图</title>
+<script>
+/* 主题：默认 auto 跟随系统深色偏好并实时响应变化；
+   ?theme=time 按本地时间 19:00-07:00 自动切深色；
+   ?theme=light / dark 手动锁定。参数只影响当前页面，不留隐藏状态。 */
+(function(){
+  var mode = "auto";
+  try{
+    var v = new URLSearchParams(location.search).get("theme");
+    if(v && ["auto","time","light","dark"].indexOf(v) > -1) mode = v;
+  }catch(e){}
+  var mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  function isNight(){ var h = new Date().getHours(); return h >= 19 || h < 7; }
+  function apply(){
+    var dark = mode === "dark" ||
+      (mode === "time" ? isNight() : mode === "auto" && !!mq && mq.matches);
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    var meta = document.querySelector('meta[name="color-scheme"]');
+    if(meta) meta.content = dark ? "dark" : "light";
+  }
+  apply();
+  if(mq){
+    if(mq.addEventListener) mq.addEventListener("change", apply);
+    else if(mq.addListener) mq.addListener(apply);
+  }
+  if(mode === "time") setInterval(apply, 60*1000);
+  window.addEventListener("focus", apply);
+})();
+</script>
 <style>
 :root{
+  color-scheme:light;
   --bg:#ffffff;
+  --card:#ffffff;
   --text:#1f2328;
   --muted:#59636e;
   --border:#d1d9e0;
   --link:#0969da;
   --blue:#0969da;
+  --blue-hover:#0860ca;
+  --year-hover:#f6f8fa;
   --empty:#ebedf0;
   --l1:#9be9a8;
   --l2:#40c463;
   --l3:#30a14e;
   --l4:#216e39;
+  --cell-outline:rgba(27,31,36,.04);
+  --cell-shadow:rgba(27,31,36,.22);
+  --updated:#8c959f;
+  --tip-bg:#24292f;
+  --tip-text:#ffffff;
+  --tip-shadow:rgba(0,0,0,.18);
+}
+/* 深色：GitHub 官方 dark contribution 配色，data-theme 由 head 脚本按系统/时段自动设置 */
+html[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0d1117;
+  --card:#0d1117;
+  --text:#e6edf3;
+  --muted:#8b949e;
+  --border:#30363d;
+  --link:#58a6ff;
+  --blue:#1f6feb;
+  --blue-hover:#388bfd;
+  --year-hover:#161b22;
+  --empty:#161b22;
+  --l1:#0e4429;
+  --l2:#006d32;
+  --l3:#26a641;
+  --l4:#39d353;
+  --cell-outline:rgba(240,246,252,.06);
+  --cell-shadow:rgba(240,246,252,.35);
+  --updated:#7d8590;
+  --tip-bg:#30363d;
+  --tip-text:#e6edf3;
+  --tip-shadow:rgba(0,0,0,.55);
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0;padding:0;background:var(--bg);color:var(--text);
@@ -27,7 +90,7 @@ body{min-height:220px;display:flex;align-items:center;justify-content:center;}
 .head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:0 0 10px;}
 .title{font-size:18px;font-weight:600;letter-spacing:-.2px;}
 .title .num{font-weight:700;}
-.card{border:1px solid var(--border);border-radius:6px;background:#fff;padding:8px 16px 12px;}
+.card{border:1px solid var(--border);border-radius:6px;background:var(--card);padding:8px 16px 12px;}
 .months{display:grid;gap:3px;margin:0 0 6px 36px;height:14px;font-size:11px;color:var(--muted);}
 .months span{white-space:nowrap;}
 .chart{display:flex;gap:8px;align-items:stretch;}
@@ -36,8 +99,9 @@ body{min-height:220px;display:flex;align-items:center;justify-content:center;}
 .days span{display:flex;align-items:center;line-height:1;}
 .grid{display:grid;gap:3px;flex:1;min-width:0;}
 .cell{aspect-ratio:1/1;border-radius:2px;background:var(--empty);
-  outline:1px solid rgba(27,31,36,.04);outline-offset:-1px;cursor:pointer;transition:transform .08s ease;}
-.cell:hover{transform:scale(1.28);position:relative;z-index:2;box-shadow:0 0 0 1px rgba(27,31,36,.22);}
+  outline:1px solid var(--cell-outline);outline-offset:-1px;cursor:pointer;
+  transition:transform .08s ease, background-color .2s ease;}
+.cell:hover{transform:scale(1.28);position:relative;z-index:2;box-shadow:0 0 0 1px var(--cell-shadow);}
 .cell.off{opacity:.35;}
 .footer{display:flex;justify-content:space-between;align-items:center;gap:10px;
   margin:10px 0 0 36px;font-size:11px;color:var(--muted);}
@@ -45,19 +109,20 @@ body{min-height:220px;display:flex;align-items:center;justify-content:center;}
 .footer a:hover{text-decoration:underline;}
 .legend{display:flex;align-items:center;gap:3px;white-space:nowrap;}
 .legend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
-.updated{color:#8c959f;font-size:10px;white-space:nowrap;}
+.updated{color:var(--updated);font-size:10px;white-space:nowrap;}
 .years{display:flex;flex-direction:column;gap:10px;flex:0 0 92px;align-items:stretch;padding-top:34px;}
 .year{border:0;background:transparent;text-align:left;font:inherit;font-size:13px;color:var(--muted);
   padding:7px 14px;border-radius:6px;cursor:pointer;}
-.year:hover{background:#f6f8fa;}
+.year:hover{background:var(--year-hover);}
 .year.active{background:var(--blue);color:#fff;font-weight:600;}
-.year.active:hover{background:#0860ca;}
-.tip{position:fixed;z-index:99;pointer-events:none;background:#24292f;color:#fff;font-size:11px;
+.year.active:hover{background:var(--blue-hover);}
+.tip{position:fixed;z-index:99;pointer-events:none;background:var(--tip-bg);color:var(--tip-text);font-size:11px;
   line-height:1.4;padding:6px 9px;border-radius:6px;white-space:nowrap;opacity:0;
-  box-shadow:0 4px 12px rgba(0,0,0,.18);transition:opacity .1s;}
+  box-shadow:0 4px 12px var(--tip-shadow);transition:opacity .1s;}
 .tip.show{opacity:1;}
 .tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
-  border:5px solid transparent;border-top-color:#24292f;}
+  border:5px solid transparent;border-top-color:var(--tip-bg);}
+body,.card,.year{transition:background-color .2s ease,color .2s ease;}
 .note{display:none;margin:8px 0 0 36px;font-size:11px;color:var(--muted);line-height:1.5;}
 .note.show{display:block;}
 @media (max-width:760px){
